@@ -1,11 +1,13 @@
-
 import os
+
+import torch
 from tqdm import tqdm
 import cv2
 import insightface
 import threading
 import roop.globals
 from roop.analyser import get_face_single, get_face_many
+from roop.face_postprocess import enhance_face
 
 FACE_SWAPPER = None
 THREAD_LOCK = threading.Lock()
@@ -32,10 +34,12 @@ def process_faces(source_face, target_frame):
         if many_faces:
             for face in many_faces:
                 target_frame = swap_face_in_frame(source_face, face, target_frame)
+                target_frame = enhance_face(face.bbox, target_frame)
     else:
         face = get_face_single(target_frame)
         if face:
             target_frame = swap_face_in_frame(source_face, face, target_frame)
+            target_frame = enhance_face(face.bbox, target_frame)
     return target_frame
 
 
@@ -82,11 +86,15 @@ def process_img(source_img, target_path, output_file):
     face = get_face_single(frame)
     source_face = get_face_single(cv2.imread(source_img))
     result = get_face_swapper().get(frame, face, source_face, paste_back=True)
+    global FACE_SWAPPER
+    del FACE_SWAPPER
+    result = enhance_face(face.bbox, result)
     cv2.imwrite(output_file, result)
     print("\n\nImage saved as:", output_file, "\n\n")
 
 
 def process_video(source_img, frame_paths):
+    torch.cuda.set_per_process_memory_fraction(0.4, 0)
     do_multi = roop.globals.gpu_vendor is not None and roop.globals.gpu_threads > 1
     progress_bar_format = '{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]'
     with tqdm(total=len(frame_paths), desc="Processing", unit="frame", dynamic_ncols=True, bar_format=progress_bar_format) as progress:
