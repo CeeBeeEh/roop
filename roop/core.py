@@ -3,7 +3,7 @@
 import os
 import sys
 # single thread doubles performance of gpu-mode - needs to be set before torch import
-if any(arg.startswith('--gpu-vendor=') for arg in sys.argv):
+if any(arg.startswith('--gpu-vendor') for arg in sys.argv):
     os.environ['OMP_NUM_THREADS'] = '1'
 import platform
 import signal
@@ -12,6 +12,7 @@ import glob
 import argparse
 import psutil
 import torch
+import tensorflow
 from pathlib import Path
 import multiprocessing as mp
 from opennsfw2 import predict_video_frames, predict_image
@@ -66,6 +67,10 @@ if os.name == "nt":
 
 
 def limit_resources():
+    # prevent tensorflow memory leak
+    gpus = tensorflow.config.experimental.list_physical_devices('GPU')
+    for gpu in gpus:
+        tensorflow.config.experimental.set_memory_growth(gpu, True)
     if args.max_memory:
         memory = args.max_memory * 1024 * 1024 * 1024
         if str(platform.system()).lower() == 'windows':
